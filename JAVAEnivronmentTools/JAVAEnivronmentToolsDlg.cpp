@@ -207,7 +207,12 @@ void CJAVAEnivronmentToolsDlg::OnBnClickedSaveButton()
 	{
 		MessageBox("Save Java Environment Error...");
 		return;
-	} 
+	}
+	else
+	{
+		MessageBox("Save Java Environment Successful...");
+		return;
+	}
 }
 
 
@@ -318,7 +323,13 @@ bool CJAVAEnivronmentToolsDlg::WriteEnvironmentPathToOS(int nType)
 		RegCloseKey(hkey);
 
 		DWORD dwResult = 0;
-		SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, NULL, (LPARAM)"Environment", SMTO_NOTIMEOUTIFNOTHUNG, 1000, &dwResult);
+		int nRet = SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, NULL, (LPARAM)"Environment", SMTO_NOTIMEOUTIFNOTHUNG, 1000, &dwResult);
+		if (0 == nRet)
+		{
+			std::string strErrMsg = "SendMessageTimeout" + std::to_string(nRet);
+			MessageBox(strErrMsg.c_str());
+			bRet = false;
+		}
 
 	}
 	else

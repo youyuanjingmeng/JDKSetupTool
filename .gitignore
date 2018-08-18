@@ -1,9 +1,7 @@
-/Debug/*
 *.sdf
 *.suo
 *.opensdf
-*.sln
-*/Release/*.pdb
-/ipch/*
-/JAVAEnivronmentTools/Release/*
-/JAVAEnivronmentTools/Debug/*
+Release/*.pdb
+ipch
+Debug
+JAVAEnivronmentTools/Release
