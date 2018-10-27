@@ -6,6 +6,7 @@
 #include "JAVAEnivronmentTools.h"
 #include "JAVAEnivronmentToolsDlg.h"
 #include "afxdialogex.h"
+#include <mutex>
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -19,7 +20,7 @@
 #define INIT_TOTALBYTES 4096
 #define BYTEINCREMENT	2048
 
-
+std::mutex g_Flaglock;
 // CAboutDlg dialog used for App About
 
 class CAboutDlg : public CDialogEx
@@ -60,6 +61,7 @@ CJAVAEnivronmentToolsDlg::CJAVAEnivronmentToolsDlg(CWnd* pParent /*=NULL*/)
 	, m_strJavaHome(_T(""))
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDI_NAIN_ICON);
+	m_bSetEnvironmentOk = false;
 }
 
 void CJAVAEnivronmentToolsDlg::DoDataExchange(CDataExchange* pDX)
@@ -172,11 +174,62 @@ HCURSOR CJAVAEnivronmentToolsDlg::OnQueryDragIcon()
 	return static_cast<HCURSOR>(m_hIcon);
 }
 
+bool CJAVAEnivronmentToolsDlg::IsFileExist(const std::string &strFilePath)
+{
+	WIN32_FILE_ATTRIBUTE_DATA attrs = { 0 };
 
+	DWORD dwRet = GetFileAttributesEx(strFilePath.c_str(), GetFileExInfoStandard, &attrs);
+
+	return 0 != dwRet;
+}
+
+
+void ChangeEnvironmentThread(void *pParam)
+{
+	OutputDebugString("start chang os environment...");
+	CJAVAEnivronmentToolsDlg *pDlg = (CJAVAEnivronmentToolsDlg *)pParam;
+	if (pDlg->WriteEnvironmentPathToOS(kJAVA_HOME)
+		&& pDlg->WriteEnvironmentPathToOS(kJAVA_PATH)
+		&& pDlg->WriteEnvironmentPathToOS(kJAVA_CLASS_PATH))
+
+	{
+		g_Flaglock.lock();
+		pDlg->m_bSetEnvironmentOk = true;
+		g_Flaglock.unlock();
+	}
+}
+
+UINT CJAVAEnivronmentToolsDlg::ThreadChangeEnvironment(LPVOID lpParan)
+{
+	OutputDebugString("start chang os environment...");
+	CJAVAEnivronmentToolsDlg *pDlg = (CJAVAEnivronmentToolsDlg *)lpParan;
+	if (pDlg->WriteEnvironmentPathToOS(kJAVA_HOME)
+		&& pDlg->WriteEnvironmentPathToOS(kJAVA_PATH)
+		&& pDlg->WriteEnvironmentPathToOS(kJAVA_CLASS_PATH))
+
+	{
+		g_Flaglock.lock();
+		pDlg->m_bSetEnvironmentOk = true;
+		g_Flaglock.unlock();
+	}
+	return 0;
+}
+
+void CJAVAEnivronmentToolsDlg::NotifyChangeToAllWin()
+{
+	DWORD dwResult = 0;
+	int nRet = SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, NULL, (LPARAM)"Environment", SMTO_NORMAL, 1000, &dwResult);
+	if (0 == nRet)
+	{
+		std::string strErrMsg = "SendMessageTimeout" + std::to_string(nRet);
+		MessageBox(strErrMsg.c_str());
+	}
+}
 
 void CJAVAEnivronmentToolsDlg::OnBnClickedSaveButton()
 {
 	//保存变量路径
+	
 	GetDlgItemText(IDC_JDKPATH_EDIT, m_strJavaHome);
 	if (m_strJavaHome.IsEmpty())
 	{
@@ -187,31 +240,22 @@ void CJAVAEnivronmentToolsDlg::OnBnClickedSaveButton()
 	m_strJavaPath = "%JAVA_HOME%\\bin;%JAVA_HOME%\\jre\\bin";
 	
 	
-	std::string strAllFile = m_strJavaHome + "\\bin\\java.exe";
- 	WIN32_FIND_DATA wfd;
- 	HANDLE hFile = FindFirstFile(strAllFile.c_str(), &wfd);
-	
- 	if (hFile == INVALID_HANDLE_VALUE)
- 	{
-		DWORD dwError = GetLastError();
- 		MessageBox("Please choose the right JDK path");
- 		return;
- 	}
-	if (m_strJavaHome.IsEmpty())
+	std::string strFlagFile = m_strJavaHome + "\\bin\\java.exe";
+	if (!IsFileExist(strFlagFile))
 	{
 		MessageBox("Please choose the path of JDK installed...");
 		return;
 	}
-	if (!WriteEnvironmentPathToOS(kJAVA_HOME) || !WriteEnvironmentPathToOS(kJAVA_PATH)
-		|| !WriteEnvironmentPathToOS(kJAVA_CLASS_PATH))
+	AfxBeginThread(ThreadChangeEnvironment, this);
+
+	NotifyChangeToAllWin();
+	if (m_bSetEnvironmentOk)
 	{
-		MessageBox("Save Java Environment Error...");
-		return;
+		MessageBox("Save Java Environment Successful...");
 	}
 	else
 	{
-		MessageBox("Save Java Environment Successful...");
-		return;
+		MessageBox("Save Java Environment Error...");
 	}
 }
 
@@ -321,16 +365,6 @@ bool CJAVAEnivronmentToolsDlg::WriteEnvironmentPathToOS(int nType)
 			bRet = false;
 		}
 		RegCloseKey(hkey);
-
-		DWORD dwResult = 0;
-		int nRet = SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, NULL, (LPARAM)"Environment", SMTO_NOTIMEOUTIFNOTHUNG, 1000, &dwResult);
-		if (0 == nRet)
-		{
-			std::string strErrMsg = "SendMessageTimeout" + std::to_string(nRet);
-			MessageBox(strErrMsg.c_str());
-			bRet = false;
-		}
-
 	}
 	else
 	{

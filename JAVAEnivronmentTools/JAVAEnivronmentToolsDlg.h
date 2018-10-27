@@ -45,7 +45,12 @@ public:
 	CString m_strJavaHome;
 	CString m_strJavaClassPath;
 	CString m_strJavaPath;
-	
+	bool m_bSetEnvironmentOk; //判断是否成功修改环境变量
 	afx_msg HBRUSH OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor);
 	virtual BOOL PreTranslateMessage(MSG* pMsg);
+	static UINT ThreadChangeEnvironment(LPVOID lpParan);
+private:
+	
+	bool IsFileExist(const std::string &strFilePath);
+	void NotifyChangeToAllWin();
 };
